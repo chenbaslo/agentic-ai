@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What Can I Make?</title>
+  <meta name="description" content="Tell us what's in your kitchen — AI creates recipes you can cook right now.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍳</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" id="brandLink">
+      <span class="brand-icon">🍳</span>
+      <span class="brand-text">What Can I Make?</span>
+    </a>
+    <div class="topbar-actions">
+      <button class="btn ghost small" id="sampleBtn" title="Fill in a sample kitchen">🎲 Sample kitchen</button>
+      <button class="btn ghost small" id="shoppingBtn">🛒 Shopping list <span class="badge" id="shoppingCount">0</span></button>
+    </div>
+  </header>
+
+  <!-- ===================== SETUP VIEW ===================== -->
+  <main id="setupView" class="view">
+    <div class="layout">
+      <div class="main-col">
+    <section class="hero">
+      <h1>What's in your kitchen<span class="accent">?</span></h1>
+      <p>Pick what you have. Our AI chef creates recipes you can cook <strong>right now</strong> — no shopping trip required.</p>
+    </section>
+
+      <div class="wizard card">
+        <nav class="stepper" id="stepper">
+          <button data-step="0" class="step active"><span class="step-num">1</span><span class="step-label">Ingredients</span></button>
+          <button data-step="1" class="step"><span class="step-num">2</span><span class="step-label">Spices &amp; condiments</span></button>
+          <button data-step="2" class="step"><span class="step-num">3</span><span class="step-label">Equipment</span></button>
+          <button data-step="3" class="step"><span class="step-num">4</span><span class="step-label">Preferences</span></button>
+        </nav>
+
+        <!-- Step 1: ingredients -->
+        <section class="panel active" data-panel="0">
+          <div class="panel-head">
+            <div>
+              <h2>🥕 What ingredients do you have?</h2>
+              <p class="muted">Tap to add to your kitchen. Mark anything about to expire as <span class="soon-pill">⚠️ Use Soon</span> in My Kitchen.</p>
+            </div>
+          </div>
+          <div class="search">
+            <span class="search-icon">🔍</span>
+            <input id="ingredientSearch" type="text" placeholder="Search or add an ingredient (e.g. feta, shrimp, kale)…" autocomplete="off">
+            <button class="btn small primary hidden" id="ingredientAdd">+ Add</button>
+          </div>
+          <div id="ingredientGroups"></div>
+        </section>
+
+        <!-- Step 2: pantry -->
+        <section class="panel" data-panel="1">
+          <div class="panel-head">
+            <div>
+              <h2>🧂 Spices &amp; condiments</h2>
+              <p class="muted">We'll only use what you select — nothing is assumed.</p>
+            </div>
+          </div>
+          <div class="quick-actions">
+            <button class="btn soft" id="basicSpicesBtn">✓ Select basic spices</button>
+            <button class="btn soft" id="stockedBtn">✓ I have a well-stocked pantry</button>
+            <button class="btn ghost small" id="clearPantryBtn">Clear</button>
+          </div>
+          <div class="search">
+            <span class="search-icon">🔍</span>
+            <input id="pantrySearch" type="text" placeholder="Search or add a spice or condiment…" autocomplete="off">
+            <button class="btn small primary hidden" id="pantryAdd">+ Add</button>
+          </div>
+          <div id="pantryGroups"></div>
+        </section>
+
+        <!-- Step 3: equipment -->
+        <section class="panel" data-panel="2">
+          <div class="panel-head">
+            <div>
+              <h2>🍳 What can you cook with?</h2>
+              <p class="muted">Recipes will only use the equipment you select.</p>
+            </div>
+          </div>
+          <div class="equipment-grid" id="equipmentGrid"></div>
+        </section>
+
+        <!-- Step 4: preferences -->
+        <section class="panel" data-panel="3">
+          <div class="panel-head">
+            <div>
+              <h2>🎛️ How do you want to cook?</h2>
+              <p class="muted">Set your constraints and pick a recipe mode.</p>
+            </div>
+          </div>
+
+          <div class="pref">
+            <h3>Recipe mode</h3>
+            <div class="mode-grid" id="modeGrid"></div>
+          </div>
+
+          <div class="pref-row">
+            <div class="pref">
+              <h3>⏱ Maximum cooking time</h3>
+              <div class="segmented" id="timeSeg"></div>
+            </div>
+            <div class="pref">
+              <h3>⭐ Difficulty</h3>
+              <div class="segmented" id="diffSeg"></div>
+            </div>
+          </div>
+          <div class="pref-row">
+            <div class="pref">
+              <h3>🥗 Diet</h3>
+              <div class="segmented" id="dietSeg"></div>
+            </div>
+            <div class="pref">
+              <h3>👥 Servings</h3>
+              <div class="stepper-num">
+                <button class="round" id="servMinus" aria-label="Fewer servings">−</button>
+                <span id="servValue">2</span>
+                <span class="muted" id="servLabel">people</span>
+                <button class="round" id="servPlus" aria-label="More servings">+</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <footer class="wizard-foot">
+          <button class="btn ghost" id="prevBtn">← Back</button>
+          <span class="muted small" id="stepHint"></span>
+          <button class="btn dark" id="nextBtn">Next →</button>
+        </footer>
+      </div>
+      </div>
+
+      <!-- My Kitchen sidebar -->
+      <aside class="kitchen card" id="kitchen">
+        <div class="kitchen-head">
+          <h2>🏠 My Kitchen</h2>
+          <button class="link" id="clearKitchen">Clear all</button>
+        </div>
+
+        <div class="kitchen-section">
+          <div class="kitchen-label">Ingredients <span class="count" id="ingCount">0</span></div>
+          <div id="kitchenIngredients" class="kitchen-list"></div>
+        </div>
+        <div class="kitchen-section">
+          <div class="kitchen-label">Spices &amp; condiments <span class="count" id="pantryCount">0</span></div>
+          <div id="kitchenPantry" class="mini-chips"></div>
+        </div>
+        <div class="kitchen-section">
+          <div class="kitchen-label">Equipment <span class="count" id="eqCount">0</span></div>
+          <div id="kitchenEquipment" class="mini-chips"></div>
+        </div>
+        <div class="kitchen-section summary" id="kitchenSummary"></div>
+
+        <button class="btn magic big" id="generateBtn">✨ What Can I Make?</button>
+        <p class="gen-hint muted small" id="genHint"></p>
+      </aside>
+    </div>
+  </main>
+
+  <!-- ===================== RESULTS VIEW ===================== -->
+  <main id="resultsView" class="view hidden">
+    <div class="results-head">
+      <button class="btn ghost" id="editBtn">← Edit my kitchen</button>
+      <div class="results-title">
+        <h1 id="resultsTitle">Here's what you can make</h1>
+        <div class="results-chips" id="resultsChips"></div>
+      </div>
+      <button class="btn magic" id="againBtn">🔄 Give Me Different Ideas</button>
+    </div>
+
+    <div id="loading" class="loading hidden">
+      <div class="chef">
+        <div class="steam"><span></span><span></span><span></span></div>
+        <div class="pan">🍳</div>
+      </div>
+      <h2 id="loadingTitle">👨‍🍳 Looking through your kitchen…</h2>
+      <ul class="loading-steps" id="loadingSteps"></ul>
+      <div class="skeletons">
+        <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+      </div>
+    </div>
+
+    <div id="errorBox" class="error-box hidden">
+      <div class="error-emoji">🥲</div>
+      <h2>Something burned in the kitchen</h2>
+      <p id="errorText"></p>
+      <button class="btn magic" id="retryBtn">Try again</button>
+    </div>
+
+    <div id="recipeGrid" class="recipe-grid"></div>
+  </main>
+
+  <!-- Recipe detail modal -->
+  <div class="modal-backdrop hidden" id="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal-close" id="modalClose" aria-label="Close">✕</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <!-- Shopping list drawer -->
+  <div class="drawer-backdrop hidden" id="drawerBackdrop"></div>
+  <aside class="drawer" id="drawer" aria-label="Shopping list">
+    <div class="drawer-head">
+      <h2>🛒 Shopping list</h2>
+      <button class="modal-close static" id="drawerClose" aria-label="Close">✕</button>
+    </div>
+    <form class="drawer-add" id="shopAddForm">
+      <input id="shopAddInput" type="text" placeholder="Add an item…" autocomplete="off">
+      <button class="btn small primary">Add</button>
+    </form>
+    <ul class="shop-list" id="shopList"></ul>
+    <div class="drawer-foot">
+      <button class="link" id="clearChecked">Remove checked items</button>
+    </div>
+  </aside>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
