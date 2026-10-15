@@ -61,7 +61,7 @@
     pantry: [],
     customPantry: [],
     equipment: [],
-    maxTime: 30, difficulty: "Anything", diet: "Anything", servings: 2, mode: "practical",
+    maxTime: 30, difficulty: "Anything", diet: "Anything", servings: 2, mode: "practical", source: "ai",
     shopping: [],              // [{name, checked, recipe}]
   });
   let state = load();
@@ -196,6 +196,7 @@
       ...(state.diet !== "Anything" ? [`🥗 ${state.diet}`] : []), `👥 ${state.servings}`,
     ].map((s) => `<span class="mini">${esc(s)}</span>`).join("");
 
+    document.querySelectorAll("#sourceSeg [data-source]").forEach((b) => b.classList.toggle("on", b.dataset.source === state.source));
     const problem = !state.ingredients.length ? "Add at least one ingredient to start."
       : !state.equipment.length ? "Select your kitchen equipment (step 3)." : "";
     $("#generateBtn").disabled = !!problem || busy;
@@ -230,8 +231,8 @@
 
   // ---------- Generation ----------
   const LOADING_STEPS = ["Checking your ingredients…", "Checking your equipment & constraints…", "Finding combinations…", "Creating your recipes…", "Plating up…"];
-  let loadingTimer, slowTimer;
-  const REQUEST_TIMEOUT_MS = 120000;
+  let loadingTimer, slowTimer, loadingSkipTimer;
+  const REQUEST_TIMEOUT_MS = 45000;
 
   function startLoading(again) {
     $("#loading").classList.remove("hidden");
@@ -252,6 +253,8 @@
     };
     tick();
     // Reassure during long waits (free servers sleep when idle and take a while to wake up)
+    $("#skipBtn").classList.add("hidden");
+    loadingSkipTimer = setTimeout(() => $("#skipBtn").classList.remove("hidden"), 6000);
     slowTimer = setTimeout(() => {
       $("#loadingTitle").textContent = API_BASE
         ? "☕ Waking up the kitchen server — the first request can take up to a minute…"
@@ -261,6 +264,7 @@
   function stopLoading() {
     clearTimeout(loadingTimer);
     clearTimeout(slowTimer);
+    clearTimeout(loadingSkipTimer);
     $("#loading").classList.add("hidden");
   }
 
@@ -277,18 +281,105 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // ---------- ⚡ Instant recipes (built-in collection, matched in the browser) ----------
+  const DIET_TAG = { Vegetarian: ["V", "VG"], Vegan: ["VG"], "Gluten-free": ["GF"] };
+  const TAG_LABEL = { V: "Vegetarian", VG: "Vegan", GF: "Gluten-free" };
+
+  function instantRecipes(again) {
+    const kitchen = new Map(state.ingredients.map((i) => [norm(i.name), i.name]));
+    const pantry = new Map(state.pantry.map((p) => [norm(p), p]));
+    const soon = new Set(state.ingredients.filter((i) => i.soon).map((i) => norm(i.name)));
+    const eqHave = new Set(state.equipment);
+    const pick = (alts, map) => alts.split("|").map((a) => map.get(norm(a))).find(Boolean);
+
+    const matches = [];
+    for (const R of window.INSTANT_RECIPES || []) {
+      if (state.maxTime && R.time > state.maxTime) continue;
+      if (state.difficulty === "Easy" && R.diff !== "Easy") continue;
+      if (DIET_TAG[state.diet] && !DIET_TAG[state.diet].some((t) => R.tags.includes(t))) continue;
+      const equipment = R.eq.map((alts) => alts.split("|").find((e) => eqHave.has(e)));
+      if (equipment.some((e) => !e)) continue;
+
+      const ingredients = [], fromKitchen = [], spices = [], missing = [], soonUsed = [];
+      for (const [alts, quantity, opt] of R.ing) {
+        const k = pick(alts, kitchen), p = !k && pick(alts, pantry);
+        if (k) {
+          ingredients.push({ name: k, quantity, from_kitchen_item: k, source: "kitchen" });
+          fromKitchen.push(k);
+          if (soon.has(norm(k))) soonUsed.push(k);
+        } else if (p) {
+          ingredients.push({ name: p, quantity, from_kitchen_item: p, source: "pantry" });
+          spices.push(p);
+        } else if (!opt) {
+          const name = alts.split("|").join(" or ");
+          ingredients.push({ name, quantity, from_kitchen_item: "", source: "missing" });
+          missing.push(name);
+        }
+      }
+      if (missing.length > 2 || !fromKitchen.length) continue;
+
+      const useBoost = state.mode === "use_what_i_have" ? 3 : 1;
+      const score = fromKitchen.length * 2 * useBoost + soonUsed.length * 5 * useBoost - missing.length * 6
+        - (state.mode === "practical" ? R.time / 30 : 0) + Math.random() * (state.mode === "creative" ? 6 : 1.5);
+      matches.push({
+        score, name: R.name, emoji: R.emoji, description: R.desc, time_minutes: R.time, difficulty: R.diff, servings: 2,
+        ingredients, use_soon_used: soonUsed, equipment, basic_tools: [], equipment_note: "", steps: R.steps,
+        diet_tags: R.tags.filter((t) => !(t === "V" && R.tags.includes("VG"))).map((t) => TAG_LABEL[t]),
+        why_it_works: R.why, uses_from_kitchen: fromKitchen, spices_used: spices, missing,
+        status: missing.length ? "almost" : "ready", instant: true,
+      });
+    }
+    matches.sort((a, b) => b.score - a.score);
+    const fresh = again ? matches.filter((m) => !seenNames.includes(m.name)) : matches;
+    const chosen = [...fresh, ...matches.filter((m) => !fresh.includes(m))].slice(0, 3);
+    return chosen;
+  }
+
+  function showInstant(again, reason) {
+    const list = instantRecipes(again);
+    recipes = list;
+    seenNames.push(...list.map((r) => r.name));
+    stopLoading();
+    if (!list.length) {
+      $("#errorText").textContent = "None of the built-in recipes fit this kitchen and these constraints. Try adding ingredients or relaxing time, diet or difficulty" + (state.source === "instant" ? " — or switch to ✨ AI chef." : ".");
+      $("#errorBox").classList.remove("hidden");
+      $("#sourceNote").classList.add("hidden");
+      return;
+    }
+    const note = $("#sourceNote");
+    note.innerHTML = (reason ? `<strong>${esc(reason)}</strong> ` : "") + "⚡ Instant recipes from our built-in collection — matched to your kitchen, not AI-generated.";
+    note.className = "source-note instant";
+    renderRecipes();
+  }
+
+  let skipRequested = null;
+  let lastWasFallback = false;
+  let apiDown = false;   // set when the page-load health check to the remote API fails
+
   async function generate(again = false) {
     if (busy || !state.ingredients.length || !state.equipment.length) return;
     busy = true;
     if (!again) seenNames = [];
     showResultsView();
     $("#resultsTitle").textContent = "Here's what you can make";
+    $("#sourceNote").classList.add("hidden");
     $("#againBtn").disabled = true;
     startLoading(again);
     renderKitchen();
+
+    const quickFallback = state.source === "ai" && (apiDown || (again && lastWasFallback));
+    if (state.source === "instant" || quickFallback) {
+      await new Promise((r) => setTimeout(r, 900));
+      showInstant(again, quickFallback ? "The AI chef isn't available right now." : "");
+      lastWasFallback = quickFallback;
+      busy = false; $("#againBtn").disabled = false; renderKitchen();
+      return;
+    }
+
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort("timeout"), REQUEST_TIMEOUT_MS);
+    skipRequested = () => controller.abort("skip");
     try {
-      const controller = new AbortController();
-      const abortTimer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
       const res = await fetch(`${API_BASE}/api/recipes`, {
         signal: controller.signal,
         method: "POST",
@@ -305,23 +396,38 @@
           mode: state.mode,
           avoid: again ? seenNames.slice(-15) : [],
         }),
-      }).finally(() => clearTimeout(abortTimer));
-      let data;
-      try { data = await res.json(); } catch (_) { throw new Error(`Server error (${res.status}). Is the backend running?`); }
-      if (!res.ok || !Array.isArray(data.recipes)) throw new Error(data.error || `Request failed (${res.status})`);
+      });
+      let data = null;
+      try { data = await res.json(); } catch (_) { /* non-JSON error page */ }
+      if (!res.ok || !data || !Array.isArray(data.recipes)) {
+        const err = new Error((data && data.error) || `Request failed (${res.status})`);
+        err.status = res.status;
+        throw err;
+      }
       recipes = data.recipes;
       seenNames.push(...recipes.map((r) => r.name));
+      lastWasFallback = false;
       stopLoading();
+      const note = $("#sourceNote");
+      note.textContent = "✨ Generated live by AI for your kitchen.";
+      note.className = "source-note ai";
       renderRecipes();
     } catch (err) {
-      stopLoading();
-      $("#errorText").textContent = err.name === "AbortError"
-        ? "The recipe server took too long to answer. If it was asleep it should be awake now — try again."
-        : err.message === "Failed to fetch"
-        ? (API_BASE ? "Couldn't reach the recipe server. It may be waking up — wait 30 seconds and try again." : "Couldn't reach the server. Check that it's running.")
-        : err.message;
-      $("#errorBox").classList.remove("hidden");
+      const reason = controller.signal.aborted
+        ? (controller.signal.reason === "skip" ? "" : "The AI took too long, so here's a quick alternative.")
+        : err.status && err.status < 500 && err.status !== 429 ? null
+        : "The AI chef isn't available right now.";
+      if (reason !== null) {
+        showInstant(again, reason);   // AI unreachable / slow / overloaded → never leave the user with nothing
+        lastWasFallback = reason !== "";
+      } else {
+        stopLoading();
+        $("#errorText").textContent = err.message;
+        $("#errorBox").classList.remove("hidden");
+      }
     } finally {
+      clearTimeout(abortTimer);
+      skipRequested = null;
       busy = false;
       $("#againBtn").disabled = false;
       renderKitchen();
@@ -400,6 +506,7 @@
           <ol class="steps">${r.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
           ${r.equipment_note ? `<div class="note adapt"><strong>🔧 Adapted to your kitchen</strong>${esc(r.equipment_note)}</div>` : ""}
           <div class="note why"><strong>💡 Why this works</strong>${esc(r.why_it_works)}</div>
+          ${r.instant && state.servings !== r.servings ? `<div class="note adapt"><strong>📏 Serving size</strong>Quantities are for ${r.servings} — scale them for ${state.servings} ${state.servings === 1 ? "person" : "people"}.</div>` : ""}
         </div>
       </div>`;
     $("#modal").classList.remove("hidden");
@@ -515,6 +622,11 @@
       else generate(false);
     });
     $("#generateBtn").addEventListener("click", () => generate(false));
+    $("#sourceSeg").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-source]");
+      if (b) { state.source = b.dataset.source; commit(); toast(state.source === "ai" ? "✨ Recipes will be generated live by AI" : "⚡ Instant built-in recipes — no waiting"); }
+    });
+    $("#skipBtn").addEventListener("click", () => skipRequested && skipRequested());
     $("#againBtn").addEventListener("click", () => generate(true));
     $("#retryBtn").addEventListener("click", () => generate(seenNames.length > 0));
     $("#editBtn").addEventListener("click", () => {
@@ -576,5 +688,12 @@
   bind();
   commit();
   // Wake up the free-tier backend (it sleeps when idle) so the first generation is fast
-  if (API_BASE) fetch(`${API_BASE}/api/health`).catch(() => {});
+  // Also tells us early if it's unreachable, so clicks can go straight to instant recipes instead of waiting.
+  if (API_BASE) {
+    const ping = new AbortController();
+    setTimeout(() => ping.abort(), 75000);   // a sleeping free server can take ~1 min to wake
+    fetch(`${API_BASE}/api/health`, { signal: ping.signal })
+      .then((r) => { apiDown = !r.ok; })
+      .catch(() => { apiDown = true; });
+  }
 })();

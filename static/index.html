@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <header class="topbar">
@@ -158,6 +158,13 @@
         </div>
         <div class="kitchen-section summary" id="kitchenSummary"></div>
 
+        <div class="source-row">
+          <span class="kitchen-label">Recipe source</span>
+          <div class="segmented full" id="sourceSeg">
+            <button data-source="ai">✨ AI chef</button>
+            <button data-source="instant">⚡ Instant</button>
+          </div>
+        </div>
         <button class="btn magic big" id="generateBtn">✨ What Can I Make?</button>
         <p class="gen-hint muted small" id="genHint"></p>
       </aside>
@@ -171,6 +178,7 @@
       <div class="results-title">
         <h1 id="resultsTitle">Here's what you can make</h1>
         <div class="results-chips" id="resultsChips"></div>
+        <p class="source-note hidden" id="sourceNote"></p>
       </div>
       <button class="btn magic" id="againBtn">🔄 Give Me Different Ideas</button>
     </div>
@@ -182,6 +190,7 @@
       </div>
       <h2 id="loadingTitle">👨‍🍳 Looking through your kitchen…</h2>
       <ul class="loading-steps" id="loadingSteps"></ul>
+      <div><button class="btn soft small hidden" id="skipBtn">⚡ Skip the wait — show instant recipes</button></div>
       <div class="skeletons">
         <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
       </div>
@@ -224,7 +233,8 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script src="config.js?v=4"></script>
+  <script src="recipes.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
