@@ -230,7 +230,8 @@
 
   // ---------- Generation ----------
   const LOADING_STEPS = ["Checking your ingredients…", "Checking your equipment & constraints…", "Finding combinations…", "Creating your recipes…", "Plating up…"];
-  let loadingTimer;
+  let loadingTimer, slowTimer;
+  const REQUEST_TIMEOUT_MS = 120000;
 
   function startLoading(again) {
     $("#loading").classList.remove("hidden");
@@ -250,9 +251,16 @@
       if (i < lis.length - 1) { i++; loadingTimer = setTimeout(tick, 1700 + Math.random() * 1200); }
     };
     tick();
+    // Reassure during long waits (free servers sleep when idle and take a while to wake up)
+    slowTimer = setTimeout(() => {
+      $("#loadingTitle").textContent = API_BASE
+        ? "☕ Waking up the kitchen server — the first request can take up to a minute…"
+        : "🍲 Still simmering — almost there…";
+    }, 15000);
   }
   function stopLoading() {
     clearTimeout(loadingTimer);
+    clearTimeout(slowTimer);
     $("#loading").classList.add("hidden");
   }
 
@@ -279,7 +287,10 @@
     startLoading(again);
     renderKitchen();
     try {
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
       const res = await fetch(`${API_BASE}/api/recipes`, {
+        signal: controller.signal,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -294,7 +305,7 @@
           mode: state.mode,
           avoid: again ? seenNames.slice(-15) : [],
         }),
-      });
+      }).finally(() => clearTimeout(abortTimer));
       let data;
       try { data = await res.json(); } catch (_) { throw new Error(`Server error (${res.status}). Is the backend running?`); }
       if (!res.ok || !Array.isArray(data.recipes)) throw new Error(data.error || `Request failed (${res.status})`);
@@ -304,7 +315,9 @@
       renderRecipes();
     } catch (err) {
       stopLoading();
-      $("#errorText").textContent = err.message === "Failed to fetch"
+      $("#errorText").textContent = err.name === "AbortError"
+        ? "The recipe server took too long to answer. If it was asleep it should be awake now — try again."
+        : err.message === "Failed to fetch"
         ? (API_BASE ? "Couldn't reach the recipe server. It may be waking up — wait 30 seconds and try again." : "Couldn't reach the server. Check that it's running.")
         : err.message;
       $("#errorBox").classList.remove("hidden");
